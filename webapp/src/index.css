@@ -1,0 +1,367 @@
+@import url("https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap");
+
+:root {
+  --ant-primary-color: #2ac9cd;
+  --text-xs--line-height: 1.25rem;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+  font-family: "Poppins";
+  color: #F5702B;
+}
+
+.ant-form-item {
+  margin-bottom: 6px;
+}
+
+.ant-table-tbody .ant-table-cell {
+  color: #707070 !important;
+}
+
+.ant-layout {
+  height: 100%;
+}
+
+.ant-layout-header {
+  z-index: 1;
+}
+
+.principal-menu {
+  padding: 20px !important;
+  background-color: #F5702B !important;
+}
+
+.ant-steps .ant-steps-item-process .ant-steps-item-icon {
+  background: #d77600 !important;
+  border-color: #d77600 !important;;
+}
+
+.principal-menu .ant-menu-item {
+  margin: 0 !important;
+  width: 100% !important;
+  height: 45px !important;
+  padding-left: 15px !important;
+  border-radius: 29px !important;
+}
+
+
+.principal-menu .ant-menu-item-selected {
+  background-color: #fff !important;
+  color: #F5702B !important;
+  border-radius: 29px !important;
+}
+
+.principal-menu .ant-menu-item-selected .icon {
+  filter: brightness(0) saturate(100%) invert(14%) sepia(58%) saturate(2318%) hue-rotate(187deg) brightness(96%) contrast(91%);
+}
+
+.ant-checkbox .ant-checkbox-inner {
+  width: 20px;
+  height: 20px;
+}
+
+.ant-checkbox-wrapper.ant-checkbox-wrapper-in-form-item input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+}
+
+.ant-dropdown-menu-title-content .ant-checkbox-wrapper {
+  min-height: min-content !important;
+}
+
+.ant-select-single .ant-select-selector, .ant-input-outlined, .ant-btn-variant-outlined{
+  border: 1px solid #EEEEEE !important;
+  height: 40px !important;
+}
+
+.ant-input-number-input:placeholder-shown {
+  height: 40px !important;
+}
+
+.ant-switch-inner { 
+  background-color: #ffcfb6 !important;
+}
+
+.ant-switch-checked .ant-switch-inner {
+  background-color: #F5702B !important;
+}
+
+.ant-avatar { 
+  background-color: #fbb691 !important;
+}
+
+
+.ant-pagination .ant-pagination-item-active {
+  border-color: #F5702B !important;
+}
+.ant-pagination .ant-pagination-item-active a {
+  color: #F5702B !important;
+}
+
+/* .ant-checkbox-wrapper {
+  min-height: 37px !important;
+  display: flex;
+  align-items: center;
+} */
+
+.ant-checkbox .ant-checkbox-inner:after {
+  top: 44%;
+  width: 7.714286px;
+  height: 13.142857px;
+}
+
+.ant-menu-light .ant-menu-item:not(.ant-menu-item-selected) {
+  color: #fff !important;
+}
+
+.ant-btn {
+  box-shadow: none !important;
+}
+
+
+.ant-steps-item-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+
+.back-btn {
+  background: transparent;
+  border: 1px solid #F5702B !important;
+  border-radius: 29px !important;
+  color: #F5702B;
+}
+
+.back-btn:hover {
+  background: #F5702B !important;
+  color: #fff !important;
+}
+
+.row-warning td {
+  background: #fff7cc !important;
+}
+
+.ant-card-body {
+  height: 100% !important;
+}
+
+.ant-menu-light.ant-menu-root.ant-menu-inline {
+  border: none !important;
+}
+
+.import-submission .ant-form-item-label {
+  padding: 0 !important;
+}
+
+.btn-select-file .ant-btn-primary {
+  background-color: black !important;
+  border: black !important;
+  padding: 15px 20px;
+  height: 40px;
+  border-radius: 50px;
+  color: #fff !important;
+}
+
+
+.ant-btn-primary, .bg-blue {
+  background-color: #F5702B !important;
+  border-color: #F5702B !important;
+}
+
+.ant-btn-primary:hover {
+  background-color: #F5702B !important;
+  border-color: #F5702B !important;
+}
+
+.learn-more-modal .ant-modal-content {
+  padding: 0 !important;
+}
+
+input,
+select,
+textarea,
+.ant-select-selector,
+.ant-picker,
+.ant-input-number,
+.ant-radio-button-wrapper,
+.ant-checkbox-inner {
+  border-color: #8096a4 !important;
+  font-size: 14px !important;
+}
+
+.ant-picker,
+select {
+  min-height: 40px !important;
+}
+
+.ant-radio-button-wrapper,
+.ant-btn-lg {
+  font-size: 14px !important;
+}
+
+/* EREFS */
+
+.erefs,
+.erefs .ant-form-item-row,
+.erefs .ant-form-item-control,
+.erefs .ant-form-item-control-input,
+.erefs .ant-form-item-control-input-content,
+.erefs .ant-radio-group,
+.erefs .ant-radio-button-wrapper.img {
+  height: 100%;
+}
+
+/* PATIENT */
+
+.ant-tabs-left > .ant-tabs-content-holder > .ant-tabs-content > .ant-tabs-tabpane {
+  padding-left: 0 !important;
+}
+
+.patient-tabs .ant-tabs-content-holder {
+  border: 0 !important;
+  max-height: calc(100vh - 156px);
+  overflow-y: auto;
+  padding: 0 20px 0 20px;
+}
+
+.patient-tabs .ant-tabs-tab {
+  border-radius: 5px !important;
+  margin-bottom: 10px !important;
+}
+
+.menu-drawer .ant-drawer-body {
+  background: #F5702B !important
+}
+
+.ant-layout-header {
+    padding: 0 34px; 
+}
+
+.statistics .ant-card {
+  height: -webkit-fill-available !important;
+}
+
+.space-params {
+  display: flex;
+  width: 100%;
+  align-items: top;
+}
+
+.space-params .ant-space-item:first-child {
+  flex: 1;
+}
+
+.space-params .ant-form-item {
+  width: 100%;
+}
+
+.new-parame {
+  background: rgb(216, 216, 216) !important;
+  border: 3px solid #ccc !important;
+}
+
+
+.custom-upload-steps.ant-steps {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+/* Ícone */
+.custom-upload-steps .ant-steps-item-icon {
+  width: 35px !important;
+  height: 35px !important;
+  line-height: 38px !important;
+  border-radius: 8px !important;
+  border: none !important;
+  margin: 0 !important;
+  background: #F6F6F6 !important;
+}
+
+.ant-steps-item-title {
+  padding-right: 0 !important;
+}
+
+.custom-upload-steps .ant-steps-item-title::after {
+  display: none !important;
+}
+
+.custom-upload-steps .ant-steps-item {
+  flex: 1 !important;
+}
+
+.ant-steps.ant-steps-inline {
+  width: 1000px !important;
+}
+
+/* Número */
+.custom-upload-steps .ant-steps-icon {
+  font-size: 14px !important;
+  font-weight: 700;
+}
+
+/* Step concluído */
+.custom-upload-steps .ant-steps-item-finish .ant-steps-item-icon, .ant-steps .ant-steps-item-finish>.ant-steps-item-container>.ant-steps-item-content>.ant-steps-item-title::after {
+  background: #f58a33 !important;
+}
+
+.custom-upload-steps
+  .ant-steps-item-finish
+  .ant-steps-item-icon
+  .ant-steps-icon {
+  color: white !important;
+}
+
+/* Step atual */
+.custom-upload-steps .ant-steps-item-process .ant-steps-item-icon {
+  background: #943200 !important;
+}
+
+.custom-upload-steps
+  .ant-steps-item-process
+  .ant-steps-item-icon
+  .ant-steps-icon {
+  color: white !important;
+}
+
+/* Próximos */
+.custom-upload-steps .ant-steps-item-wait .ant-steps-item-icon {
+  background: #e7e1e1 !important;
+}
+
+.custom-upload-steps
+  .ant-steps-item-wait
+  .ant-steps-item-icon
+  .ant-steps-icon {
+  color: #333 !important;
+}
+
+/* Texto */
+.custom-upload-steps .ant-steps-item-title {
+  font-size: 15px;
+  font-weight: 500;
+  margin-top: 8px;
+}
+
+/* Texto step concluído */
+.custom-upload-steps .ant-steps-item-finish .ant-steps-item-title {
+  color: #f58a33 !important;
+}
+
+/* Texto step atual */
+.custom-upload-steps .ant-steps-item-process .ant-steps-item-title {
+  color: #943200 !important;
+}
+
+/* Linhas */
+.custom-upload-steps .ant-steps-item-tail::after {
+  height: 2px !important;
+  background: #ececec !important;
+}
+
+@import "tailwindcss";
+
+

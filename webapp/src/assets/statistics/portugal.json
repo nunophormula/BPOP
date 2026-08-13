@@ -1,0 +1,23 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    { "type": "Feature", "properties": { "district": "Aveiro" }, "geometry": { "type": "Polygon", "coordinates": [[[ -8.7, 40.5 ], [ -8.0, 40.5 ], [ -8.0, 40.9 ], [ -8.7, 40.9 ], [ -8.7, 40.5 ]]] } },
+    { "type": "Feature", "properties": { "district": "Beja" }, "geometry": { "type": "Polygon", "coordinates": [[[ -8.5, 37.7 ], [ -7.7, 37.7 ], [ -7.7, 38.2 ], [ -8.5, 38.2 ], [ -8.5, 37.7 ]]] } },
+    { "type": "Feature", "properties": { "district": "Braga" }, "geometry": { "type": "Polygon", "coordinates": [[[ -8.7, 41.4 ], [ -8.3, 41.4 ], [ -8.3, 41.7 ], [ -8.7, 41.7 ], [ -8.7, 41.4 ]]] } },
+    { "type": "Feature", "properties": { "district": "Bragança" }, "geometry": { "type": "Polygon", "coordinates": [[[ -7.5, 41.5 ], [ -6.5, 41.5 ], [ -6.5, 42.0 ], [ -7.5, 42.0 ], [ -7.5, 41.5 ]]] } },
+    { "type": "Feature", "properties": { "district": "Castelo Branco" }, "geometry": { "type": "Polygon", "coordinates": [[[ -7.5, 39.5 ], [ -6.5, 39.5 ], [ -6.5, 40.5 ], [ -7.5, 40.5 ], [ -7.5, 39.5 ]]] } },
+    { "type": "Feature", "properties": { "district": "Coimbra" }, "geometry": { "type": "Polygon", "coordinates": [[[ -8.6, 40.0 ], [ -8.0, 40.0 ], [ -8.0, 40.5 ], [ -8.6, 40.5 ], [ -8.6, 40.0 ]]] } },
+    { "type": "Feature", "properties": { "district": "Évora" }, "geometry": { "type": "Polygon", "coordinates": [[[ -8.5, 38.3 ], [ -7.7, 38.3 ], [ -7.7, 38.8 ], [ -8.5, 38.8 ], [ -8.5, 38.3 ]]] } },
+    { "type": "Feature", "properties": { "district": "Faro" }, "geometry": { "type": "Polygon", "coordinates": [[[ -8.7, 37.0 ], [ -7.8, 37.0 ], [ -7.8, 37.5 ], [ -8.7, 37.5 ], [ -8.7, 37.0 ]]] } },
+    { "type": "Feature", "properties": { "district": "Guarda" }, "geometry": { "type": "Polygon", "coordinates": [[[ -7.5, 40.5 ], [ -6.5, 40.5 ], [ -6.5, 41.0 ], [ -7.5, 41.0 ], [ -7.5, 40.5 ]]] } },
+    { "type": "Feature", "properties": { "district": "Leiria" }, "geometry": { "type": "Polygon", "coordinates": [[[ -9.0, 39.7 ], [ -8.3, 39.7 ], [ -8.3, 40.2 ], [ -9.0, 40.2 ], [ -9.0, 39.7 ]]] } },
+    { "type": "Feature", "properties": { "district": "Lisboa" }, "geometry": { "type": "Polygon", "coordinates": [[[ -9.5, 38.7 ], [ -9.0, 38.7 ], [ -9.0, 39.0 ], [ -9.5, 39.0 ], [ -9.5, 38.7 ]]] } },
+    { "type": "Feature", "properties": { "district": "Portalegre" }, "geometry": { "type": "Polygon", "coordinates": [[[ -8.5, 38.7 ], [ -7.7, 38.7 ], [ -7.7, 39.2 ], [ -8.5, 39.2 ], [ -8.5, 38.7 ]]] } },
+    { "type": "Feature", "properties": { "district": "Porto" }, "geometry": { "type": "Polygon", "coordinates": [[[ -8.7, 41.0 ], [ -8.3, 41.0 ], [ -8.3, 41.3 ], [ -8.7, 41.3 ], [ -8.7, 41.0 ]]] } },
+    { "type": "Feature", "properties": { "district": "Santarém" }, "geometry": { "type": "Polygon", "coordinates": [[[ -9.0, 39.0 ], [ -8.3, 39.0 ], [ -8.3, 39.5 ], [ -9.0, 39.5 ], [ -9.0, 39.0 ]]] } },
+    { "type": "Feature", "properties": { "district": "Setúbal" }, "geometry": { "type": "Polygon", "coordinates": [[[ -9.3, 38.3 ], [ -8.7, 38.3 ], [ -8.7, 38.7 ], [ -9.3, 38.7 ], [ -9.3, 38.3 ]]] } },
+    { "type": "Feature", "properties": { "district": "Viana do Castelo" }, "geometry": { "type": "Polygon", "coordinates": [[[ -9.3, 41.7 ], [ -8.8, 41.7 ], [ -8.8, 42.0 ], [ -9.3, 42.0 ], [ -9.3, 41.7 ]]] } },
+    { "type": "Feature", "properties": { "district": "Vila Real" }, "geometry": { "type": "Polygon", "coordinates": [[[ -7.9, 41.1 ], [ -7.4, 41.1 ], [ -7.4, 41.5 ], [ -7.9, 41.5 ], [ -7.9, 41.1 ]]] } },
+    { "type": "Feature", "properties": { "district": "Viseu" }, "geometry": { "type": "Polygon", "coordinates": [[[ -8.2, 40.4 ], [ -7.7, 40.4 ], [ -7.7, 40.9 ], [ -8.2, 40.9 ], [ -8.2, 40.4 ]]] } }
+  ]
+}
