@@ -109,12 +109,18 @@ Isto não era sempre assim — inicialmente HER2/PD-L1 e os seus resultados esta
 
 Estrutura completa (todas as colunas/índices/FKs): [`server/sql/schema.sql`](server/sql/schema.sql). Alterações incrementais documentadas em `server/migrations/`.
 
+Dados de referência (não vêm na estrutura, têm de ser populados à parte):
+- [`server/sql/seed-biomarkers.sql`](server/sql/seed-biomarkers.sql) — os 13 biomarcadores reais em uso (HER2, PD-L1, Ki67, MLH1, MSH2, MSH6, PMS2, p53, RE, RP, Claudina 18.2, EBER, FOLR1) com as respetivas keywords e resultados possíveis. Idempotente (`INSERT IGNORE`).
+- `server/scripts/seed-reference-data.js` — plataformas e anticorpos de referência (`node scripts/seed-reference-data.js`, requer que já exista um `login` com role `admin`).
+
 ---
 
 ## 6. Correr o projeto localmente
 
 ```bash
-# Base de dados: importar server/sql/schema.sql para uma BD MySQL/MariaDB vazia
+# Base de dados: importar, por esta ordem, para uma BD MySQL/MariaDB vazia:
+#   1. server/sql/schema.sql          (estrutura)
+#   2. server/sql/seed-biomarkers.sql (biomarcadores + resultados)
 
 # Backend
 cd server
@@ -122,6 +128,8 @@ npm install
 # criar server/.env com EMAIL_HOST / EMAIL_PORT / EMAIL_USER / EMAIL_PASS
 # e configurar a ligação à BD em server/utils/database.js
 node index.js
+# depois de ter pelo menos um admin criado, popular plataformas/anticorpos:
+node scripts/seed-reference-data.js
 
 # Frontend
 cd webapp

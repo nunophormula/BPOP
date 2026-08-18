@@ -1,7 +1,8 @@
 -- Schema completo da base de dados "pdl1" (estrutura apenas, sem dados).
 -- Gerado a partir da instância de desenvolvimento local em 2026-08-13.
--- Para popular referências (plataformas, anticorpos, biomarcadores) depois de criar
--- as tabelas, ver server/scripts/seed-reference-data.js.
+-- Para popular referências depois de criar as tabelas: plataformas/anticorpos
+-- em server/scripts/seed-reference-data.js, biomarcadores/resultados em
+-- server/sql/seed-biomarkers.sql.
 
 SET FOREIGN_KEY_CHECKS=0;
 
