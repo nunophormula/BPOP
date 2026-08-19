@@ -1,4 +1,4 @@
-import { useState, useContext, useEffect, useMemo, useCallback } from "react";
+import { useState, useContext, useEffect, useMemo } from "react";
 
 // IMPORTS
 import {
@@ -26,7 +26,6 @@ import {
   Card,
 } from "antd";
 
-import stringSimilarity from "string-similarity";
 import {
   PlusCircleOutlined,
   FileExcelOutlined,
@@ -59,101 +58,13 @@ import success from "../../../assets/Sucesso.svg";
 
 import { Context } from "../../../utils/context";
 import { useHospitalId, useHospitalBasePath } from "../../../utils/hospitalId";
-import * as pdfjsLib from "pdfjs-dist";
-import pdfWorker from "pdfjs-dist/build/pdf.worker.min.mjs?url";
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
+import { normalizeText } from "./parsing/textUtils";
+import { getMissingFields } from "./parsing/submissionRow";
+import { readPdfFile } from "./parsing/readPdf";
+import { readExcelFile } from "./parsing/readExcel";
 
 const { Option } = Select;
-
-function normalizeText(str) {
-  return String(str ?? "")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^\w\s+]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-// Same cleanup as normalizeText, but keeps a 1:1 index map back to the
-// original string so context windows can be sliced without drifting once
-// whitespace runs are collapsed.
-function normalizeTextWithMap(str) {
-  const original = String(str ?? "");
-  let expanded = "";
-  const expandedMap = [];
-
-  for (let i = 0; i < original.length; i++) {
-    const cleaned = original[i]
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .toLowerCase()
-      .replace(/[^\w\s+]/g, " ");
-
-    for (const ch of cleaned) {
-      expanded += ch;
-      expandedMap.push(i);
-    }
-  }
-
-  let collapsed = "";
-  const collapsedMap = [];
-  let lastWasSpace = false;
-
-  for (let i = 0; i < expanded.length; i++) {
-    const ch = expanded[i];
-    const isSpace = ch === " ";
-    if (isSpace && lastWasSpace) continue;
-    collapsed += ch;
-    collapsedMap.push(expandedMap[i]);
-    lastWasSpace = isSpace;
-  }
-
-  const firstNonSpace = collapsed.search(/\S/);
-  const trailingSpace = collapsed.search(/\s+$/);
-  const start = firstNonSpace === -1 ? 0 : firstNonSpace;
-  const end = trailingSpace === -1 ? collapsed.length : trailingSpace;
-
-  return {
-    text: collapsed.slice(start, end),
-    map: collapsedMap.slice(start, end),
-  };
-}
-
-// Hospital "listagem de consulta" PDF exports rebuild each diagnosis note
-// incrementally, reprinting the whole note from scratch every time a line is
-// appended. Raw extraction therefore contains the same lines many times
-// over. Since every earlier revision is a prefix (line-for-line) of a later
-// one, keeping only the first occurrence of each line reconstructs the final,
-// complete note while cutting the text (and downstream parsing work) down
-// dramatically.
-function dedupeRepeatedLines(text) {
-  if (!text) return text;
-
-  const seen = new Set();
-  const kept = [];
-
-  text.split("\n").forEach((rawLine) => {
-    const line = rawLine.trim();
-
-    if (!line) {
-      kept.push(rawLine);
-      return;
-    }
-
-    if (seen.has(line)) return;
-
-    seen.add(line);
-    kept.push(rawLine);
-  });
-
-  return kept.join("\n");
-}
-
-function escapeRegex(str = "") {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
 
 export default function CreateExcel() {
   const [excelData, setExcelData] = useState([]);
@@ -201,11 +112,6 @@ export default function CreateExcel() {
   const hospitalId = useHospitalId();
   const basePath = useHospitalBasePath();
   const navigate = useNavigate();
-
-  const DIAGNOSIS_REGEX =
-    /\b(?:[HB]?\s*20\d{2}\/\d{3,}(?:-\d+)?|[HB]?\s*20\d{2}\d{3,}|\d{3,}\/[HB]?\s*20\d{2})\b/gi;
-
-  const FUZZY_THRESHOLD = 0.6;
 
   async function fetchHospitalProcesses() {
     try {
@@ -287,20 +193,6 @@ export default function CreateExcel() {
   const validRows = useMemo(() => {
     return excelData.filter((row) => !row.missingFields?.length);
   }, [excelData]);
-
-  function getMissingFields(parsed) {
-    const missing = [];
-
-    if (!parsed?.Produto) {
-      missing.push("Produto");
-    }
-
-    if (!parsed?.Resultado) {
-      missing.push("Resultado");
-    }
-
-    return missing;
-  }
 
   function extractAfterParam(text, paramKey) {
     if (!text) return null;
@@ -430,12 +322,6 @@ export default function CreateExcel() {
       .toUpperCase();
   }
 
-  function getPatientName(index) {
-    return (
-      patientNames[index] || `Doente ${String(index + 1).padStart(4, "0")}`
-    );
-  }
-
   async function fetchTechnical() {
     try {
       const res = await axios.get(
@@ -462,52 +348,6 @@ export default function CreateExcel() {
     } catch (e) {
       console.log(e);
     }
-  }
-
-  // Groups text runs into lines by their Y position instead of flattening
-  // everything with a single space — needed so dedupeRepeatedLines can spot
-  // the incrementally-rebuilt, line-by-line duplicated notes these exports
-  // produce.
-  function itemsToLines(items) {
-    const lines = [];
-    let currentY = null;
-    let currentLine = [];
-
-    items.forEach((item) => {
-      const y = Math.round(item.transform?.[5] ?? 0);
-
-      if (currentY === null || Math.abs(y - currentY) > 2) {
-        if (currentLine.length) lines.push(currentLine.join(" "));
-        currentLine = [item.str];
-        currentY = y;
-      } else {
-        currentLine.push(item.str);
-      }
-    });
-
-    if (currentLine.length) lines.push(currentLine.join(" "));
-
-    return lines;
-  }
-
-  async function extractPdfPages(file) {
-    const buffer = await file.arrayBuffer();
-
-    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
-
-    const pagePromises = Array.from({ length: pdf.numPages }, async (_, i) => {
-      const page = await pdf.getPage(i + 1);
-      const content = await page.getTextContent();
-
-      const text = itemsToLines(content.items).join("\n");
-
-      return {
-        page: i + 1,
-        text,
-      };
-    });
-
-    return Promise.all(pagePromises);
   }
 
   const summaryStats = useMemo(() => {
@@ -611,153 +451,29 @@ export default function CreateExcel() {
         return;
       }
 
-      const pages = await extractPdfPages(selectedFile);
-
-      const fullText = pages.map((p) => p.text).join("\n");
-
-      const cases = splitCasesByDiagnosis(fullText);
-      setTotalDiagnosticosEncontrados(cases.length);
-
-      setPdfProgressText(`${cases.length} diagnósticos encontrados`);
-
-      // params uma vez só
-      const produtoParam = params.find((p) => p.param_key === "Produto");
-
-      console.log(`[PDF IMPORT] Encontrados ${cases.length} casos clínicos`);
-
       const selectedTopografia = uploadForm.getFieldValue("topografia");
 
       if (!selectedTopografia) {
         message.error("Seleciona o modelo tumoral");
         return;
       }
-      const context = {
-        Topografia: selectedTopografia,
-      };
 
-      setPdfTotalCases(cases.length);
-      setPdfProcessedCases(0);
+      const { parsedPages, totalCases } = await readPdfFile(selectedFile, {
+        topografia: selectedTopografia,
+        params,
+        dbBiomarkers,
+        findTemplate,
+        onProgress: ({ processed, total, text }) => {
+          setPdfProcessedCases(processed);
+          setPdfTotalCases(total);
+          setPdfProgress(total ? Math.round((processed / total) * 100) : 0);
+          setPdfProgressText(text);
+        },
+      });
 
-      const parsedPages = [];
+      setTotalDiagnosticosEncontrados(totalCases);
 
-      for (let index = 0; index < cases.length; index++) {
-        const caseItem = cases[index];
-
-        setPdfProcessedCases(index + 1);
-
-        setPdfProgress(Math.round(((index + 1) / cases.length) * 100));
-
-        setPdfProgressText(
-          `A analisar diagnóstico ${index + 1} de ${cases.length}`
-        );
-
-        const text = caseItem.text || "";
-
-        const biomarkers = detectBiomarkers(text);
-        const selectedTopografia = uploadForm.getFieldValue("topografia");
-
-        const matchedTemplates = biomarkers
-          .map((biomarker) => findTemplate(biomarker, selectedTopografia))
-          .filter(Boolean);
-
-        setPdfProgressText(
-          `Diagnóstico ${index + 1}/${cases.length} • ${
-            biomarkers.join(", ") || "Sem biomarcador"
-          }`
-        );
-        const diagnosisNumber = caseItem.diagnosisNumber;
-
-        const produto = extractParamFromCase(text, produtoParam);
-
-        const fuzzyParsed = parsePdfText(text);
-        const contextualParsed = parseWithContext(text, params);
-        const clinicalParsed = parseClinicalText(text);
-
-        const baseParsed = {
-          ...fuzzyParsed,
-          ...clinicalParsed,
-          ...contextualParsed,
-
-          Produto: produto ?? fuzzyParsed.Produto ?? null,
-
-          ...context,
-        };
-
-        const markers = biomarkers.length > 0 ? biomarkers : [];
-
-        markers.forEach((biomarker) => {
-          const template = findTemplate(biomarker, selectedTopografia);
-
-          // Cada biomarcador tem a sua própria escala de resultados
-          // (biomarker_results), por isso o score tem de ser calculado por
-          // biomarcador em vez de uma vez só para o caso inteiro.
-          const resultado = extractResultadoForBiomarker(text, biomarker);
-
-          const mergedParsed = {
-            ...baseParsed,
-            Resultado: resultado ?? null,
-          };
-
-          const parsedWithDbParams = params.reduce(
-            (acc, p) => {
-              const key = p.param_key || p.key;
-
-              if (!key) return acc;
-
-              acc[key] = mergedParsed[key] ?? null;
-
-              return acc;
-            },
-            { ...context }
-          );
-
-          const missingFields = getMissingFields(parsedWithDbParams);
-
-          parsedPages.push({
-            caseIndex: index + 1,
-            rawText: text,
-            diagnosisNumber,
-
-            patientName: getPatientName(index),
-
-            parsed: {
-              ...parsedWithDbParams,
-
-              Topografia: template?.topografia || selectedTopografia,
-
-              Plataforma: template?.plataforma || null,
-
-              Anticorpo:
-                template?.anticorpo || template?.anticorpoClone || null,
-            },
-
-            missingFields,
-            hasIssues: missingFields.length > 0,
-
-            biomarker,
-            biomarkers: [biomarker],
-
-            matchedTemplates,
-            debug: {
-              fuzzyParsed,
-              contextualParsed,
-              clinicalParsed,
-            },
-          });
-        });
-
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      }
       await markExistingDiagnostics(parsedPages);
-
-      console.log("CASES", cases.length);
-
-      console.log("PARSED PAGES", parsedPages.length);
-
-      console.log(
-        "DIAGNOSTICOS UNICOS",
-        new Set(parsedPages.map((x) => x.diagnosisNumber)).size
-      );
 
       const biomarkersFound = new Set();
 
@@ -851,10 +567,6 @@ export default function CreateExcel() {
     };
   });
 
-  function parsePdfText(text) {
-    return parsePdfWithSimilarity(text, params);
-  }
-
   function exportToExcel(data) {
     const rows = data.map((s) => ({
       "ID Interno": s.id,
@@ -882,257 +594,6 @@ export default function CreateExcel() {
     });
 
     saveAs(blob, "submissoes_her2.xlsx");
-  }
-
-  function matchValue(text, values = []) {
-    if (!text || !values.length) return null;
-
-    const clean = normalizeText(text);
-
-    let best = {
-      value: null,
-      score: 0,
-    };
-
-    for (const v of values) {
-      const terms = [v.value, ...(v.keywords || [])]
-        .filter(Boolean)
-        .map(normalizeText);
-
-      for (const term of terms) {
-        // MATCH DIRETO
-        if (clean.includes(term)) {
-          return v.value;
-        }
-
-        // FUZZY EM JANELAS
-        const words = clean.split(" ");
-
-        const termLength = term.split(" ").length;
-
-        for (let i = 0; i < words.length; i++) {
-          const chunk = words.slice(i, i + termLength + 3).join(" ");
-
-          const score = stringSimilarity.compareTwoStrings(chunk, term);
-
-          if (score > best.score) {
-            best = {
-              value: v.value,
-              score,
-            };
-          }
-        }
-      }
-    }
-
-    return best.score >= FUZZY_THRESHOLD ? best.value : null;
-  }
-
-  function bestFuzzyMatch(text, options) {
-    if (!text || !options?.length) return null;
-
-    const cleanText = normalizeText(text);
-
-    let best = {
-      value: null,
-      score: 0,
-    };
-
-    for (const opt of options) {
-      const allTerms = [opt.value, ...(opt.keywords || [])].map(normalizeText);
-
-      for (const term of allTerms) {
-        const score = stringSimilarity.compareTwoStrings(cleanText, term);
-
-        if (score > best.score) {
-          best = {
-            value: opt.value,
-            score,
-          };
-        }
-      }
-    }
-
-    return best.score >= FUZZY_THRESHOLD ? best.value : null;
-  }
-
-  function matchParam(text, param) {
-    if (!text || !param) return null;
-
-    const clean = normalizeText(text);
-    for (const kw of param.keywords || []) {
-      if (clean.includes(normalizeText(kw))) {
-        return kw;
-      }
-    }
-
-    if (param.values?.length) {
-      const best = bestFuzzyMatch(text, param.values);
-      if (best) return best;
-    }
-
-    const paramScore = stringSimilarity.compareTwoStrings(
-      clean,
-      normalizeText(param.param_key)
-    );
-
-    if (paramScore >= FUZZY_THRESHOLD) {
-      return param.param_key;
-    }
-
-    return null;
-  }
-
-  function findNextParamIndex(text, params) {
-    const lower = text.toLowerCase();
-
-    let minIndex = -1;
-
-    for (const p of params) {
-      const key = normalizeText(p.param_key || p.key);
-      const idx = lower.indexOf(key);
-
-      if (idx !== -1) {
-        if (minIndex === -1 || idx < minIndex) {
-          minIndex = idx;
-        }
-      }
-    }
-
-    return minIndex;
-  }
-
-  function extractParamFromCase(text, param) {
-    if (!text || !param) return null;
-
-    // 1. tentar contexto direto (KEYWORD → CONTEXTO)
-    const contexts = getKeywordContexts(text, param.keywords, 80, 200);
-
-    for (const context of contexts) {
-      const match = matchValue(context, param.values);
-      if (match) return match;
-    }
-
-    // 2. fallback: match global no bloco
-    const fallback = matchValue(text, param.values);
-    if (fallback) return fallback;
-
-    return null;
-  }
-
-  function parseWithContext(text, params) {
-    const result = {};
-
-    if (!text || !params?.length) return result;
-
-    const normalizedText = normalizeText(text);
-
-    for (const param of params) {
-      const key = param.param_key || param.key;
-
-      if (!key) continue;
-
-      if (key === "Resultado") {
-        const contexts = getKeywordContexts(text, param.keywords, 100, 300);
-
-        for (const context of contexts) {
-          const matchedValue = matchValue(context, param.values);
-
-          if (matchedValue) {
-            result[key] = matchedValue;
-
-            break;
-          }
-        }
-
-        continue;
-      }
-
-      const allParamTerms = [key, ...(param.keywords || [])]
-        .filter(Boolean)
-        .map(normalizeText);
-
-      let matchedKeyword = null;
-      let matchedIndex = -1;
-
-      for (const term of allParamTerms) {
-        const idx = normalizedText.indexOf(term);
-
-        if (idx !== -1) {
-          matchedKeyword = term;
-          matchedIndex = idx;
-          break;
-        }
-      }
-
-      if (!matchedKeyword) continue;
-
-      const originalSlice = text.slice(matchedIndex);
-
-      const nextKeyIndex = findNextParamIndex(
-        normalizeText(originalSlice.slice(matchedKeyword.length)),
-        params
-      );
-
-      const context =
-        nextKeyIndex !== -1
-          ? originalSlice.slice(
-              matchedKeyword.length,
-              matchedKeyword.length + nextKeyIndex
-            )
-          : originalSlice.slice(matchedKeyword.length);
-
-      const matchedValue = matchValue(context, param.values);
-
-      if (matchedValue) {
-        result[key] = matchedValue;
-
-        continue;
-      }
-
-      const fallback = matchValue(text, param.values);
-
-      if (fallback) {
-        result[key] = fallback;
-
-        continue;
-      }
-    }
-
-    return result;
-  }
-
-  function getKeywordContexts(text, keywords, before = 100, after = 300) {
-    if (!text || !keywords?.length) return [];
-
-    const contexts = [];
-
-    const { text: cleanText, map } = normalizeTextWithMap(text);
-
-    keywords.forEach((kw) => {
-      const cleanKw = normalizeText(kw);
-
-      let start = 0;
-
-      while (true) {
-        const idx = cleanText.indexOf(cleanKw, start);
-
-        if (idx === -1) break;
-
-        const originalIdx = map[idx] ?? 0;
-
-        contexts.push(
-          text.slice(
-            Math.max(0, originalIdx - before),
-            Math.min(text.length, originalIdx + after)
-          )
-        );
-
-        start = idx + cleanKw.length;
-      }
-    });
-
-    return contexts;
   }
 
   useEffect(() => {
@@ -1184,69 +645,6 @@ export default function CreateExcel() {
     return map;
   }, [params]);
 
-  const extractFromDatabase = useCallback(
-    (text) => {
-      const results = {};
-
-      if (!text) return results;
-
-      const clean = normalizeText(text);
-
-      params.forEach((param) => {
-        param.values?.forEach((v) => {
-          const terms = [
-            normalizeText(v.value),
-            ...(v.synonyms || []).map(normalizeText),
-            ...(v.keywords || []).map(normalizeText),
-          ];
-
-          for (const term of terms) {
-            const regex = new RegExp(`\\b${escapeRegex(term)}\\b`, "i");
-
-            if (regex.test(clean)) {
-              results[param.param_key] = v.value;
-
-              break;
-            }
-          }
-        });
-      });
-
-      return results;
-    },
-    [params]
-  );
-
-  const applyClinicalRules = useCallback((text) => {
-    const results = {};
-
-    if (!text) return results;
-
-    const clean = normalizeText(text);
-
-    // "Resultado" não é definido aqui — vem exclusivamente do
-    // biomarker_results de cada biomarcador detetado (ver
-    // extractResultadoForBiomarker), não de regras genéricas fixas no código.
-
-    if (/tenue|ténue|fraca/.test(clean))
-      results["Intensidade da expressão"] = "Fraca";
-
-    if (/moderada/.test(clean))
-      results["Intensidade da expressão"] = "Moderada";
-
-    if (/forte/.test(clean)) results["Intensidade da expressão"] = "Forte";
-
-    return results;
-  }, []);
-
-  const parseClinicalText = useCallback(
-    (text) => ({
-      ...extractFromDatabase(text),
-      ...applyClinicalRules(text),
-    }),
-    [extractFromDatabase, applyClinicalRules]
-  );
-
   async function processExcel(values) {
     try {
       setUploadStep(2);
@@ -1258,132 +656,18 @@ export default function CreateExcel() {
       setPdfProgress(0);
       setPdfProgressText("A carregar ficheiro...");
 
-      const formData = new FormData();
-
-      formData.append("excel", selectedFile);
-
-      formData.append("technical_context", JSON.stringify(values));
-
-      const res = await axios.post(endpoints.submissionHer.readExcel, formData, {
-        onUploadProgress: (event) => {
-          if (!event.total) return;
-
-          setPdfProgress(Math.round((event.loaded / event.total) * 100));
+      const { parsedRows } = await readExcelFile(selectedFile, values, {
+        params,
+        dbBiomarkers,
+        findTemplate,
+        onUploadProgress: (percent) => setPdfProgress(percent),
+        onProgress: ({ processed, total, text }) => {
+          setPdfProcessedCases(processed);
+          setPdfTotalCases(total);
+          setPdfProgress(total ? Math.round((processed / total) * 100) : 0);
+          setPdfProgressText(text);
         },
       });
-
-      const rawRows = res.data.sheets?.[0]?.rawRows || [];
-
-      const selectedTopografia = values.topografia;
-
-      const produtoParam = params.find((p) => p.param_key === "Produto");
-
-      setPdfTotalCases(rawRows.length);
-      setPdfProcessedCases(0);
-      setPdfProgress(0);
-      setPdfProgressText(`${rawRows.length} linhas encontradas`);
-
-      const parsedRows = [];
-
-      for (let index = 0; index < rawRows.length; index++) {
-        const row = rawRows[index];
-
-        setPdfProcessedCases(index + 1);
-
-        setPdfProgress(
-          rawRows.length
-            ? Math.round(((index + 1) / rawRows.length) * 100)
-            : 0
-        );
-
-        setPdfProgressText(
-          `A analisar linha ${index + 1} de ${rawRows.length}`
-        );
-
-        // Ignora os nomes das colunas: junta todo o texto da linha e usa a
-        // mesma deteção por texto livre do fluxo de PDF, já que o layout de
-        // colunas varia de ficheiro para ficheiro.
-        const text = Object.values(row)
-          .filter(
-            (value) => value !== null && value !== undefined && String(value).trim()
-          )
-          .map((value) => String(value))
-          .join("\n");
-
-        const diagnosisMatch = text.match(DIAGNOSIS_REGEX);
-
-        const diagnosisNumber = diagnosisMatch
-          ? diagnosisMatch[0].replace(/\s+/g, "")
-          : null;
-
-        const biomarkers = detectBiomarkers(text);
-
-        const produto = extractParamFromCase(text, produtoParam);
-
-        const fuzzyParsed = parsePdfText(text);
-        const contextualParsed = parseWithContext(text, params);
-        const clinicalParsed = parseClinicalText(text);
-
-        const baseParsed = {
-          ...fuzzyParsed,
-          ...clinicalParsed,
-          ...contextualParsed,
-
-          Produto: produto ?? fuzzyParsed.Produto ?? null,
-        };
-
-        biomarkers.forEach((biomarker) => {
-          const template = findTemplate(biomarker, selectedTopografia);
-
-          // Cada biomarcador tem a sua própria escala de resultados
-          // (biomarker_results), por isso o score tem de ser calculado por
-          // biomarcador em vez de uma vez só para a linha inteira.
-          const resultado = extractResultadoForBiomarker(text, biomarker);
-
-          const mergedParsed = {
-            ...baseParsed,
-            Resultado: resultado ?? null,
-          };
-
-          const parsedWithDbParams = params.reduce((acc, p) => {
-            const key = p.param_key || p.key;
-
-            if (!key) return acc;
-
-            acc[key] = mergedParsed[key] ?? null;
-
-            return acc;
-          }, {});
-
-          const missingFields = getMissingFields(parsedWithDbParams);
-
-          parsedRows.push({
-            rawText: text,
-            diagnosisNumber,
-
-            patientName: getPatientName(index),
-
-            parsed: {
-              ...parsedWithDbParams,
-
-              Topografia: template?.topografia || selectedTopografia,
-
-              Plataforma: template?.plataforma || null,
-
-              Anticorpo:
-                template?.anticorpo || template?.anticorpoClone || null,
-            },
-
-            missingFields,
-            hasIssues: missingFields.length > 0,
-
-            biomarker,
-            biomarkers: [biomarker],
-          });
-        });
-
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      }
 
       await markExistingDiagnostics(parsedRows);
 
@@ -1571,18 +855,6 @@ export default function CreateExcel() {
   const statCard =
     "bg-white rounded-[10px] border !border-[#EEEEEE] shadow-[0px_10px_20px_#00000005] p-5 h-full flex flex-col justify-between";
 
-  function getChunks(text, size = 12) {
-    const words = normalizeText(text).split(" ");
-
-    const chunks = [];
-
-    for (let i = 0; i < words.length; i++) {
-      chunks.push(words.slice(i, i + size).join(" "));
-    }
-
-    return chunks;
-  }
-
   const biomarkerFilters = useMemo(() => {
     const set = new Set();
 
@@ -1597,41 +869,6 @@ export default function CreateExcel() {
       value: b,
     }));
   }, [excelData]);
-
-  function detectBiomarkers(text) {
-    const clean = normalizeText(text);
-
-    const found = [];
-
-    dbBiomarkers.forEach((biomarker) => {
-      const exists = (biomarker.keywords || []).some((kw) =>
-        clean.includes(normalizeText(kw))
-      );
-
-      if (exists) {
-        found.push(biomarker.nome);
-      }
-    });
-
-    return [...new Set(found)];
-  }
-
-  // Resultado de um diagnóstico é sempre específico do biomarcador detetado
-  // (cada um tem a sua própria escala de scores) — vem exclusivamente dos
-  // valores/keywords definidos em biomarker_results, nunca de uma lista
-  // genérica partilhada entre biomarcadores.
-  function extractResultadoForBiomarker(text, biomarkerNome) {
-    const biomarkerRecord = dbBiomarkers.find(
-      (b) => normalizeText(b.nome) === normalizeText(biomarkerNome)
-    );
-
-    if (!biomarkerRecord?.resultados?.length) return null;
-
-    return extractParamFromCase(text, {
-      keywords: biomarkerRecord.keywords,
-      values: biomarkerRecord.resultados,
-    });
-  }
 
   function buildStats(rows = []) {
     const products = {};
@@ -1667,37 +904,6 @@ export default function CreateExcel() {
     };
   }
 
-  function splitCasesByDiagnosis(fullText) {
-    if (!fullText) return [];
-
-    const matches = [...fullText.matchAll(DIAGNOSIS_REGEX)];
-
-    // se não encontra nada → 1 caso
-    if (matches.length === 0) {
-      return [{ diagnosisNumber: null, text: dedupeRepeatedLines(fullText) }];
-    }
-
-    const cases = [];
-
-    for (let i = 0; i < matches.length; i++) {
-      const match = matches[i];
-
-      const start = match.index;
-
-      const end =
-        i < matches.length - 1 ? matches[i + 1].index : fullText.length;
-
-      const caseText = dedupeRepeatedLines(fullText.slice(start, end).trim());
-
-      cases.push({
-        diagnosisNumber: match[0].replace(/\s+/g, ""),
-        text: caseText,
-      });
-    }
-
-    return cases;
-  }
-
   const detectImportType = (file) => {
     const extension = file.name.split(".").pop()?.toLowerCase();
 
@@ -1731,169 +937,6 @@ export default function CreateExcel() {
       (template.anticorpo_status && template.anticorpo_status !== "approved")
     );
   }
-
-  function parsePdfWithSimilarity(text, params) {
-    const result = {};
-
-    if (!text) return result;
-
-    const chunks = getChunks(text);
-
-    params.forEach((param) => {
-      if (!param.values?.length) return;
-
-      let best = {
-        value: null,
-        score: 0,
-      };
-
-      param.values.forEach((option) => {
-        const terms = [option.value, ...(option.keywords || [])]
-          .filter(Boolean)
-          .map(normalizeText);
-
-        terms.forEach((term) => {
-          chunks.forEach((chunk) => {
-            const score = stringSimilarity.compareTwoStrings(chunk, term);
-
-            if (score > best.score) {
-              best = {
-                value: option.value,
-                score,
-              };
-            }
-          });
-        });
-      });
-
-      if (best.score >= FUZZY_THRESHOLD) {
-        result[param.param_key] = best.value;
-      }
-    });
-
-    return result;
-  }
-
-  const patientNames = [
-    "João Fonseca",
-    "Ana Silva",
-    "Pedro Santos",
-    "Maria Ferreira",
-    "Miguel Costa",
-    "Rita Almeida",
-    "Bruno Rocha",
-    "Inês Pereira",
-    "Tiago Martins",
-    "Sofia Lopes",
-    "André Carvalho",
-    "Marta Correia",
-    "Ricardo Gomes",
-    "Carla Teixeira",
-    "Luís Rodrigues",
-    "Patrícia Oliveira",
-    "Nuno Sousa",
-    "Daniela Pinto",
-    "Marco Ribeiro",
-    "Sara Cardoso",
-    "Vítor Cunha",
-    "Catarina Melo",
-    "Paulo Pires",
-    "Helena Antunes",
-    "Rui Barros",
-    "Diana Neves",
-    "Filipe Tavares",
-    "Sónia Castro",
-    "Gonçalo Moreira",
-    "Andreia Faria",
-    "José Mendes",
-    "Cláudia Figueiredo",
-    "Fernando Lopes",
-    "Teresa Matos",
-    "David Campos",
-    "Mónica Freitas",
-    "Adriano Sequeira",
-    "Sandra Peixoto",
-    "Hugo Fernandes",
-    "Beatriz Coelho",
-    "Afonso Magalhães",
-    "Leonor Simões",
-    "Tomás Batista",
-    "Joana Rocha",
-    "Eduardo Borges",
-    "Isabel Monteiro",
-    "Fábio Azevedo",
-    "Raquel Cunha",
-    "Diogo Machado",
-    "Márcia Moura",
-    "Alexandre Leite",
-    "Filipa Duarte",
-    "Samuel Martins",
-    "Cristina Reis",
-    "Rodrigo Esteves",
-    "Vanessa Pacheco",
-    "Sérgio Baptista",
-    "Liliana Guedes",
-    "Leandro Carvalho",
-    "Margarida Lopes",
-    "Tiago Nascimento",
-    "Vera Ribeiro",
-    "Nelson Teixeira",
-    "Carolina Pinto",
-    "Ruben Costa",
-    "Tatiana Alves",
-    "Gil Sousa",
-    "Célia Correia",
-    "Mateus Gomes",
-    "Elsa Ferreira",
-    "Artur Santos",
-    "Bruna Oliveira",
-    "Francisco Almeida",
-    "Jéssica Martins",
-    "Henrique Faria",
-    "Iris Neves",
-    "António Rocha",
-    "Lúcia Tavares",
-    "Rafael Barros",
-    "Daniela Moura",
-    "Rúben Cardoso",
-    "Mafalda Castro",
-    "Pedro Cunha",
-    "Susana Moreira",
-    "Jorge Mendes",
-    "Dora Pires",
-    "Victor Gomes",
-    "Sílvia Lopes",
-    "Tiago Seabra",
-    "Patrícia Carvalho",
-    "Afonso Ribeiro",
-    "Anaísa Costa",
-    "Gustavo Melo",
-    "Mariana Borges",
-    "Bruno Simões",
-    "Vanessa Leite",
-    "Diogo Duarte",
-    "Cátia Ferreira",
-    "Rui Tavares",
-    "Helena Costa",
-    "Luís Matos",
-    "Andreia Ribeiro",
-    "Ricardo Neves",
-    "Sónia Santos",
-    "Paulo Carvalho",
-    "Mónica Almeida",
-    "David Pacheco",
-    "Joana Castro",
-    "Filipe Moreira",
-    "Sara Lopes",
-    "Nélson Martins",
-    "Beatriz Teixeira",
-    "Gonçalo Cunha",
-    "Cristina Duarte",
-    "Tomás Costa",
-    "Cláudia Ribeiro",
-    "Rodrigo Sousa",
-    "Liliana Ferreira",
-  ];
 
   return (
     <div className="p-6 w-full">

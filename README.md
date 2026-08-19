@@ -55,7 +55,20 @@ Cada hospital tem uma página de **Utilizadores** (antiga "Representantes") onde
 
 ## 4. Como funciona a leitura de PDF/Excel
 
-Todo este motor vive em `webapp/src/pages/main/submission/create.jsx`. O fluxo visível ao utilizador é um wizard de 5 passos:
+O motor de leitura vive isolado em [`webapp/src/pages/main/submission/parsing/`](webapp/src/pages/main/submission/parsing/) — o componente [`create.jsx`](webapp/src/pages/main/submission/create.jsx) trata só da interface (formulário, barra de progresso, tabela de revisão) e chama uma função de topo por tipo de ficheiro:
+
+| Ficheiro | Para quê |
+|---|---|
+| [`readPdf.js`](webapp/src/pages/main/submission/parsing/readPdf.js) | `readPdfFile()` — orquestra a leitura completa de um PDF |
+| [`readExcel.js`](webapp/src/pages/main/submission/parsing/readExcel.js) | `readExcelFile()` — o mesmo para Excel |
+| [`pdfReader.js`](webapp/src/pages/main/submission/parsing/pdfReader.js) | Extração de texto do PDF e separação por diagnóstico |
+| [`paramMatching.js`](webapp/src/pages/main/submission/parsing/paramMatching.js) | Motor genérico de deteção por keywords + fuzzy matching |
+| [`clinicalRules.js`](webapp/src/pages/main/submission/parsing/clinicalRules.js) | Match direto contra a BD de parâmetros + regras clínicas fixas |
+| [`biomarkerDetection.js`](webapp/src/pages/main/submission/parsing/biomarkerDetection.js) | Deteção de biomarcadores e do respetivo resultado (via BD) |
+| [`textUtils.js`](webapp/src/pages/main/submission/parsing/textUtils.js) | Normalização de texto e outros utilitários partilhados |
+| [`submissionRow.js`](webapp/src/pages/main/submission/parsing/submissionRow.js) / [`patientNames.js`](webapp/src/pages/main/submission/parsing/patientNames.js) | Validação da linha e nome fictício do doente |
+
+O wizard visível ao utilizador continua a ser o mesmo de sempre, 5 passos:
 
 ```
 Ficheiro → Contexto Técnico → Parsing → Processado → Revisão
@@ -66,26 +79,29 @@ Ficheiro → Contexto Técnico → Parsing → Processado → Revisão
 3. **Parsing**: aqui acontece a extração e deteção automática (detalhado abaixo). Há uma barra de progresso real (não simulada) com percentagem e contagem "X / Y diagnósticos processados".
 4. **Processado / Revisão**: mostra estatísticas (nº de registos, taxa de sucesso, resultados por biomarcador) e uma tabela editável, filtrável para "só os que têm problemas", antes de confirmar a submissão final.
 
-### 4.1. Caminho do PDF
+### 4.1. Passo a passo dentro de `readPdfFile`
 
-1. **Extração de texto** (`extractPdfPages`, com `pdfjs-dist`): o PDF é lido **inteiramente no browser**, página a página. Os fragmentos de texto de cada página são agrupados em linhas pela posição Y (`itemsToLines`) — isto é importante porque uma extração "ingénua" de PDF costuma misturar colunas/blocos de texto fora de ordem.
-2. **Separação em "casos"** (`splitCasesByDiagnosis`): muitos exports hospitalares são uma "listagem de consulta" com **vários doentes/diagnósticos concatenados num único PDF**. O texto completo é cortado em blocos usando uma regex que reconhece números de diagnóstico do tipo `H2026/1234`, `B2026/1234`, `2026001234`, `1234/H2026`, etc. Cada bloco entre duas ocorrências consecutivas é um "caso".
-3. **Deduplicação de linhas repetidas** (`dedupeRepeatedLines`): alguns exports reconstroem a nota clínica incrementalmente, reimprimindo o texto todo a cada linha nova adicionada — o mesmo conteúdo aparece dezenas de vezes. Como cada revisão é sempre um prefixo da seguinte, mantém-se só a primeira ocorrência de cada linha, o que reconstitui a nota final sem repetição.
-4. **Para cada caso**, processado sequencialmente (com um pequeno "yield" entre iterações para a barra de progresso atualizar em tempo real):
-   - **Deteção de biomarcador(es)** (`detectBiomarkers`): compara o texto (normalizado — sem acentos, minúsculas) contra as **keywords de cada biomarcador definido na tabela `biomarkers`** (ex.: HER2 deteta "her2", "her-2", "erbb2", "c-erbb2", …). Um caso pode conter mais do que um biomarcador.
-   - **Extração do "Produto"** (tipo de amostra — Biópsia / Peça cirúrgica): usa uma lista fixa de parâmetros (`params.jsx`) com keywords + valores possíveis, com correspondência exata e, em fallback, *fuzzy matching* (via `string-similarity`) para tolerar erros de OCR/formatação.
-   - **Extração do "Resultado" — por biomarcador**: esta é a parte mais importante do motor e foi desenhada especificamente para não misturar escalas diferentes. Cada biomarcador detetado é avaliado **individualmente** contra os seus próprios `biomarker_results` (tabela `biomarker_results`: `value` + `keywords`) — por exemplo, HER2 é comparado contra "Negativo", "1+", "2+", "3+", …, enquanto PD-L1 é comparado contra "TPS < 1%", "CPS ≥ 10", etc. Isto significa que um mesmo caso com HER2 *e* PD-L1 mencionados obtém um resultado correto e independente para cada um, em vez de aplicar a mesma lista genérica aos dois (era um bug do desenho anterior, corrigido).
-   - **Template técnico**: com o biomarcador + modelo tumoral já conhecidos, procura-se em `hospital_technical` a Plataforma/Anticorpo configurados para essa combinação nesse hospital.
-   - Se faltar Produto ou Resultado, o registo fica marcado como "com problemas" (`hasIssues`) para revisão manual; se o biomarcador não tiver template configurado (ou tiver um pendente de aprovação), a aplicação bloqueia e pede para criar o template ou aguardar aprovação antes de continuar.
-5. **Verificação de duplicados**: antes de mostrar a revisão final, os pares (diagnóstico, biomarcador) são enviados ao servidor (`/submissionHer/checkExisting`) que compara com o que já existe — o servidor é que consegue comparar porque só ele tem a chave/hash; o browser não pode reidentificar diagnósticos já gravados sozinho.
+1. **Extrair o texto do PDF** — `extractPdfPages()` (em `pdfReader.js`) lê o PDF inteiramente no browser, página a página, com `pdfjs-dist`. Por dentro agrupa os fragmentos de texto de cada página em linhas pela posição Y (função privada `itemsToLines`) — sem isto, uma extração "ingénua" de PDF costuma misturar colunas/blocos fora de ordem. `readPdfFile` junta o texto de todas as páginas numa só string.
+
+2. **Cortar por doente** — `splitCasesByDiagnosis()` (também em `pdfReader.js`) usa uma regex (`DIAGNOSIS_REGEX`, reconhece números de diagnóstico do tipo `H2026/1234`, `B2026/1234`, `2026001234`, `1234/H2026`) para cortar o texto completo em blocos, um por doente. Para cada bloco, chama `dedupeRepeatedLines()` (em `textUtils.js`), que remove a duplicação típica destes exports: alguns hospitais reimprimem a nota clínica inteira de cada vez que acrescentam uma linha nova, por isso o mesmo texto aparece repetido dezenas de vezes — como cada versão é sempre um prefixo da seguinte, guarda-se só a primeira ocorrência de cada linha.
+
+3. **Para cada caso, três perguntas** (dentro do ciclo `for` de `readPdfFile`):
+   - *Que biomarcador(es)?* — `detectBiomarkers()` (em `biomarkerDetection.js`) compara o texto normalizado (`normalizeText`, de `textUtils.js`) contra as keywords de cada biomarcador guardado na tabela `biomarkers`. Um caso pode conter mais do que um biomarcador.
+   - *Que tipo de amostra (Produto)?* — `extractParamFromCase()` (em `paramMatching.js`) isola primeiro o texto à volta das keywords do parâmetro (`getKeywordContexts`) e só depois testa correspondência com `matchValue()` (já com fuzzy matching embutido).
+   - *Que resultado, por biomarcador?* — para cada biomarcador encontrado, `extractResultadoForBiomarker()` (em `biomarkerDetection.js`) chama outra vez `extractParamFromCase()`, mas com as keywords/resultados **desse biomarcador específico** (tabela `biomarker_results`) em vez de uma lista genérica. É assim que HER2 e PD-L1 mencionados no mesmo doente ficam cada um com o resultado certo, em vez de partilharem a mesma escala.
+
+4. **Duas redes de segurança extra**, a correr sobre o mesmo texto e combinadas com o resultado acima:
+   - `parsePdfWithSimilarity()` (em `paramMatching.js`) — corta o texto em janelas de ~12 palavras (`getChunks`, de `textUtils.js`) e aceita a correspondência mais parecida, para tolerar erros de OCR/digitalização.
+   - `parseWithContext()` (em `paramMatching.js`) — outra passagem por contexto, mas que sabe onde parar de ler (até à etiqueta do próximo parâmetro, via a função privada `findNextParamIndex`).
+   - `parseClinicalText()` (em `clinicalRules.js`) — combina `extractFromDatabase()` (match direto por regex contra os valores da BD) com `applyClinicalRules()` (regras fixas, ex.: intensidade da expressão).
+
+5. **Validar e nomear** — `getMissingFields()` (em `submissionRow.js`) marca a linha como "com problemas" se faltar Produto ou Resultado; `getPatientName()` (em `patientNames.js`) atribui um nome fictício só para mostrar na tabela de revisão (o nome real do doente nunca entra no sistema).
+
+6. **No fim**, `readPdfFile` devolve `{ parsedPages, totalCases }` a `create.jsx`, que só aí decide o que fazer a nível de interface: avisar se falta um template técnico para algum biomarcador, avançar o wizard, mostrar mensagens.
 
 ### 4.2. Caminho do Excel
 
-O Excel **não tem um motor de leitura próprio** — reutiliza exatamente a mesma lógica de deteção de biomarcador/resultado do PDF, aplicada linha a linha:
-
-1. O ficheiro é enviado ao servidor (`POST /submissionHer/readExcel`), que só faz o parsing estrutural (linhas/colunas) com a biblioteca `xlsx` e devolve as linhas em bruto como JSON — nenhuma inteligência aqui.
-2. No browser, cada linha é convertida em "texto livre" (concatenação de todos os valores das células, ignorando os nomes das colunas — porque o layout varia de ficheiro para ficheiro) e passa **pelo mesmo pipeline do PDF**: deteção de biomarcadores por keywords, extração de Resultado por biomarcador a partir de `biomarker_results`, extração de Produto, lookup de template técnico.
-3. A barra de progresso tem duas fases: primeiro a **percentagem real de upload** do ficheiro (`onUploadProgress` do axios), depois a **percentagem de linhas analisadas**.
+`readExcelFile()` (em `readExcel.js`) não tem motor próprio — reutiliza exatamente as mesmas funções do ponto 3 em diante. A diferença está só no início: em vez de `extractPdfPages`/`splitCasesByDiagnosis`, o ficheiro é enviado ao servidor (`POST /submissionHer/readExcel`), que faz só o parsing estrutural (linhas/colunas) com a biblioteca `xlsx` e devolve as linhas em bruto como JSON — nenhuma inteligência aí. Cada linha é depois convertida em "texto livre" (junção de todos os valores das células, ignorando os nomes das colunas, porque o layout varia de ficheiro para ficheiro) e segue o mesmo caminho do PDF a partir da deteção de biomarcadores. A barra de progresso tem duas fases: primeiro a percentagem real de upload do ficheiro, depois a percentagem de linhas analisadas.
 
 ### 4.3. Porque é que os biomarcadores/resultados vêm da base de dados
 
