@@ -120,7 +120,7 @@ const fields = [
     name: "biomarcador",
     label: "Biomarcador",
     type: "dropdown",
-    options: ["HER2", "PD-L1"],
+    optionsSource: "biomarcador",
   },
 
   {
@@ -270,6 +270,7 @@ export default function TechnicalForm() {
   const [templates, setTemplates] = useState([]);
   const [platforms, setPlatforms] = useState([]);
   const [antibodies, setAntibodies] = useState([]);
+  const [biomarkers, setBiomarkers] = useState([]);
 
   const [suggestForm] = Form.useForm();
   const [suggestModal, setSuggestModal] = useState({ open: false, type: null });
@@ -331,12 +332,14 @@ export default function TechnicalForm() {
 
   async function loadOptions() {
     try {
-      const [platformsRes, antibodiesRes] = await Promise.all([
+      const [platformsRes, antibodiesRes, biomarkersRes] = await Promise.all([
         axios.get(`${endpoints.dataManagement.read}?type=platform`),
         axios.get(`${endpoints.dataManagement.read}?type=antibody`),
+        axios.get(endpoints.biomarkers.read),
       ]);
       setPlatforms(platformsRes.data);
       setAntibodies(antibodiesRes.data);
+      setBiomarkers(biomarkersRes.data || []);
     } catch (e) {
       console.log(e);
     }
@@ -479,6 +482,8 @@ export default function TechnicalForm() {
             ? platforms.map((p) => p.nome)
             : field.optionsSource === "antibody"
             ? antibodies.map((a) => a.nome)
+            : field.optionsSource === "biomarcador"
+            ? biomarkers.map((b) => b.nome)
             : field.options;
 
         const isTopografiaWaitingForBiomarcador =
