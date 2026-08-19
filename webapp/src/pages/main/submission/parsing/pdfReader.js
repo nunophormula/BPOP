@@ -7,17 +7,11 @@ import { dedupeRepeatedLines } from "./textUtils";
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
 
-// Reconhece números de diagnóstico do tipo H2026/1234, B2026/1234,
-// 2026001234 ou 1234/H2026 — usado tanto para separar um PDF com vários
-// doentes em casos individuais, como para extrair o nº de diagnóstico de
-// cada linha de um Excel.
+// Nº de diagnóstico (H2026/1234, B2026/1234, 2026001234 ou 1234/H2026) — separa casos no PDF e linhas no Excel.
 export const DIAGNOSIS_REGEX =
   /\b(?:[HB]?\s*20\d{2}\/\d{3,}(?:-\d+)?|[HB]?\s*20\d{2}\d{3,}|\d{3,}\/[HB]?\s*20\d{2})\b/gi;
 
-// Groups text runs into lines by their Y position instead of flattening
-// everything with a single space — needed so dedupeRepeatedLines can spot
-// the incrementally-rebuilt, line-by-line duplicated notes these exports
-// produce.
+// Agrupa por posição Y em vez de achatar tudo com um espaço, para dedupeRepeatedLines conseguir comparar linha a linha.
 function itemsToLines(items) {
   const lines = [];
   let currentY = null;
@@ -40,6 +34,7 @@ function itemsToLines(items) {
   return lines;
 }
 
+// Extrai o texto de cada página do PDF (agrupado em linhas por posição Y).
 export async function extractPdfPages(file) {
   const buffer = await file.arrayBuffer();
 
@@ -60,9 +55,7 @@ export async function extractPdfPages(file) {
   return Promise.all(pagePromises);
 }
 
-// Muitos exports hospitalares são uma "listagem de consulta" com vários
-// doentes/diagnósticos concatenados num único PDF — corta o texto completo
-// em blocos usando as ocorrências do número de diagnóstico.
+// Corta o texto completo em casos, um por ocorrência de nº de diagnóstico (PDFs de listagem têm vários).
 export function splitCasesByDiagnosis(fullText) {
   if (!fullText) return [];
 
@@ -80,8 +73,7 @@ export function splitCasesByDiagnosis(fullText) {
 
     const start = match.index;
 
-    const end =
-      i < matches.length - 1 ? matches[i + 1].index : fullText.length;
+    const end = i < matches.length - 1 ? matches[i + 1].index : fullText.length;
 
     const caseText = dedupeRepeatedLines(fullText.slice(start, end).trim());
 

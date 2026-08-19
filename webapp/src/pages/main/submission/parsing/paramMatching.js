@@ -7,6 +7,7 @@ import { normalizeText, normalizeTextWithMap, getChunks } from "./textUtils";
 
 const FUZZY_THRESHOLD = 0.6;
 
+// Match direto de uma keyword/valor no texto; se falhar, fuzzy match em janelas de palavras.
 export function matchValue(text, values = []) {
   if (!text || !values.length) return null;
 
@@ -51,6 +52,7 @@ export function matchValue(text, values = []) {
   return best.score >= FUZZY_THRESHOLD ? best.value : null;
 }
 
+// Fuzzy match do texto inteiro (sem janelas) contra os valores possíveis.
 export function bestFuzzyMatch(text, options) {
   if (!text || !options?.length) return null;
 
@@ -79,6 +81,7 @@ export function bestFuzzyMatch(text, options) {
   return best.score >= FUZZY_THRESHOLD ? best.value : null;
 }
 
+// Índice da keyword de outro parâmetro mais próxima, para limitar o contexto ao trecho entre parâmetros.
 function findNextParamIndex(text, params) {
   const lower = text.toLowerCase();
 
@@ -98,6 +101,7 @@ function findNextParamIndex(text, params) {
   return minIndex;
 }
 
+// Recorta uma janela de texto (before/after chars) à volta de cada ocorrência de cada keyword.
 export function getKeywordContexts(text, keywords, before = 100, after = 300) {
   if (!text || !keywords?.length) return [];
 
@@ -131,6 +135,7 @@ export function getKeywordContexts(text, keywords, before = 100, after = 300) {
   return contexts;
 }
 
+// Valor de um único parâmetro num caso: contexto perto da keyword, com fallback para o texto todo.
 export function extractParamFromCase(text, param) {
   if (!text || !param) return null;
 
@@ -149,6 +154,7 @@ export function extractParamFromCase(text, param) {
   return null;
 }
 
+// Valor de cada parâmetro da lista, cortando o texto entre a sua keyword e a keyword seguinte.
 export function parseWithContext(text, params) {
   const result = {};
 
@@ -231,6 +237,7 @@ export function parseWithContext(text, params) {
   return result;
 }
 
+// Fuzzy match por blocos de N palavras, sem depender de keywords — fallback quando o contexto falha.
 export function parsePdfWithSimilarity(text, params) {
   const result = {};
 

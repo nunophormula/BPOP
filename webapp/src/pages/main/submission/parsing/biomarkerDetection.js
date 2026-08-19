@@ -5,6 +5,7 @@
 import { normalizeText } from "./textUtils";
 import { extractParamFromCase } from "./paramMatching";
 
+// Biomarcadores cujas keywords (vindas da BD) aparecem no texto do caso.
 export function detectBiomarkers(text, dbBiomarkers) {
   const clean = normalizeText(text);
 
@@ -23,10 +24,7 @@ export function detectBiomarkers(text, dbBiomarkers) {
   return [...new Set(found)];
 }
 
-// Resultado de um diagnóstico é sempre específico do biomarcador detetado
-// (cada um tem a sua própria escala de scores) — vem exclusivamente dos
-// valores/keywords definidos em biomarker_results, nunca de uma lista
-// genérica partilhada entre biomarcadores.
+// Resultado é sempre específico do biomarcador — usa a escala de biomarker_results dele, não uma lista genérica.
 export function extractResultadoForBiomarker(text, biomarkerNome, dbBiomarkers) {
   const biomarkerRecord = (dbBiomarkers || []).find(
     (b) => normalizeText(b.nome) === normalizeText(biomarkerNome)

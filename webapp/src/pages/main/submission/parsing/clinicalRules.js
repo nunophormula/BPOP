@@ -4,6 +4,7 @@
 // fixos (ex.: intensidade de expressão).
 import { normalizeText, escapeRegex } from "./textUtils";
 
+// Match direto (regex de palavra inteira) dos valores/sinónimos/keywords de cada parâmetro da BD.
 export function extractFromDatabase(text, params) {
   const results = {};
 
@@ -34,16 +35,13 @@ export function extractFromDatabase(text, params) {
   return results;
 }
 
+// Padrões clínicos fixos (intensidade); "Resultado" fica de fora — vem do biomarcador via biomarkerDetection.js.
 export function applyClinicalRules(text) {
   const results = {};
 
   if (!text) return results;
 
   const clean = normalizeText(text);
-
-  // "Resultado" não é definido aqui — vem exclusivamente do
-  // biomarker_results de cada biomarcador detetado (ver
-  // biomarkerDetection.js), não de regras genéricas fixas no código.
 
   if (/tenue|ténue|fraca/.test(clean))
     results["Intensidade da expressão"] = "Fraca";
@@ -56,6 +54,7 @@ export function applyClinicalRules(text) {
   return results;
 }
 
+// Combina as duas regras acima num único resultado.
 export function parseClinicalText(text, params) {
   return {
     ...extractFromDatabase(text, params),

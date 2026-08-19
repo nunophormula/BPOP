@@ -55,13 +55,9 @@ export function normalizeTextWithMap(str) {
   };
 }
 
-// Hospital "listagem de consulta" PDF exports rebuild each diagnosis note
-// incrementally, reprinting the whole note from scratch every time a line is
-// appended. Raw extraction therefore contains the same lines many times
-// over. Since every earlier revision is a prefix (line-for-line) of a later
-// one, keeping only the first occurrence of each line reconstructs the final,
-// complete note while cutting the text (and downstream parsing work) down
-// dramatically.
+// Estas listagens reimprimem a nota toda a cada linha nova, por isso o texto
+// vem com as mesmas linhas repetidas várias vezes. Como cada versão é sempre
+// um prefixo da seguinte, guardar só a 1ª ocorrência de cada linha reconstrói a nota final.
 export function dedupeRepeatedLines(text) {
   if (!text) return text;
 

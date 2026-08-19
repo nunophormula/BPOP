@@ -1,7 +1,4 @@
-// Orquestra a leitura de um PDF: extrai o texto, separa por diagnóstico e
-// aplica o motor de deteção/matching a cada caso. Devolve só os dados
-// estruturados — decisões de UI (templates em falta, transições de passo,
-// mensagens) ficam no componente que chama isto.
+// Devolve só dados estruturados — decisões de UI ficam no componente que chama isto.
 import { extractPdfPages, splitCasesByDiagnosis } from "./pdfReader";
 import {
   extractParamFromCase,
@@ -9,19 +6,14 @@ import {
   parsePdfWithSimilarity,
 } from "./paramMatching";
 import { parseClinicalText } from "./clinicalRules";
-import { detectBiomarkers, extractResultadoForBiomarker } from "./biomarkerDetection";
+import {
+  detectBiomarkers,
+  extractResultadoForBiomarker,
+} from "./biomarkerDetection";
 import { getMissingFields } from "./submissionRow";
 import { getPatientName } from "./patientNames";
 
-/**
- * @param {File} file
- * @param {object} options
- * @param {string} options.topografia - modelo tumoral selecionado
- * @param {Array} options.params - lista de parâmetros (Produto, Tumor primário, ...)
- * @param {Array} options.dbBiomarkers - biomarcadores + resultados vindos da BD
- * @param {(biomarcador: string, topografia: string) => object|undefined} options.findTemplate
- * @param {(update: {processed: number, total: number, text: string}) => void} [options.onProgress]
- */
+// Extrai o texto do PDF, separa por diagnóstico e corre o motor de deteção/matching sobre cada caso.
 export async function readPdfFile(
   file,
   { topografia, params, dbBiomarkers, findTemplate, onProgress }
@@ -71,9 +63,14 @@ export async function readPdfFile(
 
     const produto = extractParamFromCase(text, produtoParam);
 
+    // a mais bruta: parte o texto inteiro em blocos de 12 palavras (getChunks) e faz fuzzy match (string-similarity) de cada bloco contra os valores/keywords de cada parâmetro, sem se ancorar em nenhuma keyword. Não sabe onde está a keyword do parâmetro no texto — varre tudo às cegas à procura do bloco com maior score (≥0.6).
     const fuzzyParsed = parsePdfWithSimilarity(text, params);
+    // mais cirúrgica: procura a primeira ocorrência exata da keyword do parâmetro no texto e usa como contexto só o trecho entre essa keyword e a keyword do parâmetro seguinte (ou, no caso de "Resultado", uma janela de caracteres à volta — getKeywordContexts). Só depois tenta matchValue dentro desse contexto reduzido; se falhar, cai para fuzzy no texto todo.
     const contextualParsed = parseWithContext(text, params);
+    // combina duas coisas: extractFromDatabase (clinicalRules.js:8) faz match exato por regex de palavra inteira (\bterm\b) contra os valores da BD — sem fuzzy, sem posição, só presença exata no texto; e applyClinicalRules (clinicalRules.js:39) aplica regras clínicas fixas no código (ex. "tenue"/"fraca" → Intensidade "Fraca"), nada vindo de params.
     const clinicalParsed = parseClinicalText(text, params);
+
+    // A razão de correr as três é que se complementam e são fundidas por ordem de confiança — contextualParsed (a mais precisa) tem prioridade, depois clinicalParsed, e fuzzyParsed fica como rede de segurança quando as outras duas não encontram nada:
 
     const baseParsed = {
       ...fuzzyParsed,
@@ -90,10 +87,12 @@ export async function readPdfFile(
     markers.forEach((biomarker) => {
       const template = findTemplate(biomarker, topografia);
 
-      // Cada biomarcador tem a sua própria escala de resultados
-      // (biomarker_results), por isso o score tem de ser calculado por
-      // biomarcador em vez de uma vez só para o caso inteiro.
-      const resultado = extractResultadoForBiomarker(text, biomarker, dbBiomarkers);
+      // Score calculado por biomarcador: cada um tem a sua própria escala de resultados.
+      const resultado = extractResultadoForBiomarker(
+        text,
+        biomarker,
+        dbBiomarkers
+      );
 
       const mergedParsed = {
         ...baseParsed,

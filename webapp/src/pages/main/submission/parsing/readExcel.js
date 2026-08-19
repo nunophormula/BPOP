@@ -1,8 +1,4 @@
-// Orquestra a leitura de um Excel: o servidor só faz o parsing estrutural
-// (linhas/colunas), depois cada linha passa pelo mesmo motor de
-// deteção/matching usado no PDF (texto livre, sem depender do layout de
-// colunas do ficheiro). Devolve só os dados estruturados — decisões de UI
-// ficam no componente que chama isto.
+// Devolve só dados estruturados — decisões de UI ficam no componente que chama isto.
 import axios from "axios";
 import endpoints from "../../../../utils/endpoints";
 import { DIAGNOSIS_REGEX } from "./pdfReader";
@@ -16,16 +12,7 @@ import { detectBiomarkers, extractResultadoForBiomarker } from "./biomarkerDetec
 import { getMissingFields } from "./submissionRow";
 import { getPatientName } from "./patientNames";
 
-/**
- * @param {File} file
- * @param {object} technicalContextValues - valores do formulário de contexto técnico (inclui `topografia`)
- * @param {object} options
- * @param {Array} options.params
- * @param {Array} options.dbBiomarkers
- * @param {(biomarcador: string, topografia: string) => object|undefined} options.findTemplate
- * @param {(percent: number) => void} [options.onUploadProgress] - progresso do upload do ficheiro (0-100)
- * @param {(update: {processed: number, total: number, text: string}) => void} [options.onProgress]
- */
+// Envia o Excel para o servidor (só parsing estrutural) e corre o motor de deteção sobre o texto de cada linha.
 export async function readExcelFile(
   file,
   technicalContextValues,
@@ -69,9 +56,7 @@ export async function readExcelFile(
       text: `A analisar linha ${index + 1} de ${rawRows.length}`,
     });
 
-    // Ignora os nomes das colunas: junta todo o texto da linha e usa a
-    // mesma deteção por texto livre do fluxo de PDF, já que o layout de
-    // colunas varia de ficheiro para ficheiro.
+    // Junta o texto da linha toda (ignora nomes de colunas, que variam por ficheiro) e trata como texto livre.
     const text = Object.values(row)
       .filter(
         (value) => value !== null && value !== undefined && String(value).trim()
@@ -104,9 +89,7 @@ export async function readExcelFile(
     biomarkers.forEach((biomarker) => {
       const template = findTemplate(biomarker, selectedTopografia);
 
-      // Cada biomarcador tem a sua própria escala de resultados
-      // (biomarker_results), por isso o score tem de ser calculado por
-      // biomarcador em vez de uma vez só para a linha inteira.
+      // Score calculado por biomarcador: cada um tem a sua própria escala de resultados.
       const resultado = extractResultadoForBiomarker(text, biomarker, dbBiomarkers);
 
       const mergedParsed = {
